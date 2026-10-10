@@ -1,0 +1,49 @@
+/* Investigation room (receptor) */
+
+.watch { max-width: 1200px; margin: 0 auto; padding: clamp(1.2rem, 4vw, 2.5rem); }
+
+.watch-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-areas: "player" "info" "chat" "recommended";
+  gap: 1.3rem;
+}
+@media (min-width: 960px) {
+  .watch-layout {
+    grid-template-columns: 1.6fr 1fr;
+    grid-template-areas: "player chat" "info chat" "recommended chat";
+    align-items: start;
+  }
+  .watch-layout .chat-card { position: sticky; top: 5.5rem; max-height: calc(100vh - 6rem); }
+}
+
+.player-card { grid-area: player; }
+.info-card { grid-area: info; }
+.watch-layout .chat-card { grid-area: chat; }
+.recommended-card { grid-area: recommended; }
+
+.player-overlay { position: absolute; top: 0.8rem; left: 0.8rem; display: flex; gap: 0.5rem; }
+.status-text { color: var(--paper-dim); font-size: 0.9rem; margin: 0.9rem 0; }
+.player-card .controls { display: flex; gap: 0.75rem; }
+
+.info-card__head { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.9rem; }
+.host-avatar {
+  width: 44px; height: 44px; border-radius: 50%; background: var(--signal-soft); color: var(--signal-hover);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-family: var(--font-mono);
+  border: 1px solid rgba(221, 90, 42, 0.4); flex-shrink: 0;
+}
+.info-card__head h1 { font-size: 1.2rem; }
+.info-card__meta { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin: 0.6rem 0 0.8rem; font-size: 0.85rem; }
+#description { margin-bottom: 0.9rem; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.tag { background: var(--surface-hover); border: 1px solid var(--border); color: var(--paper-dim); font-size: 0.78rem; padding: 0.25rem 0.6rem; border-radius: 999px; font-family: var(--font-mono); }
+.action-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.action-row .btn.is-active { background: var(--signal-soft); border-color: var(--signal); color: var(--signal-hover); }
+.action-row .btn svg { flex-shrink: 0; }
+.action-row .btn.is-active svg { fill: currentColor; }
+
+.recommended-card h2 { font-size: 1rem; margin-bottom: 0.8rem; }
+
+@media (max-width: 640px) {
+  .player-card .controls { flex-direction: column; }
+}

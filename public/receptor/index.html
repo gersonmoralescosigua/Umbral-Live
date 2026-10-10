@@ -1,23 +1,154 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Receptor - WebRTC</title>
-  <link rel="stylesheet" href="/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Investigation Room — Umbral Live</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/theme.css" />
+  <link rel="stylesheet" href="/css/receptor.css" />
+  <link rel="stylesheet" href="/css/observatory.css" />
 </head>
 <body>
-  <nav><a href="/emisor">Ir al emisor →</a></nav>
-  <h1>Receptor (ver transmisión)</h1>
-  <video id="remoteVideo" autoplay playsinline></video>
-  <div class="controls">
-    <button id="connectBtn">Conectar</button>
-    <button id="disconnectBtn" disabled>Desconectar</button>
+  <div id="bootScreen" class="boot-screen" role="status" aria-live="polite">
+    <div class="boot-screen__scope"><div class="boot-screen__sweep"></div></div>
+    <p class="boot-screen__text">The signal is waking.</p>
   </div>
-  <div id="status">Presiona "Conectar" para ver la transmisión del emisor.</div>
+
+  <div id="identityGate" class="identity-gate" hidden>
+    <div class="identity-gate__panel">
+      <p class="identity-gate__eyebrow">UMBRAL LIVE</p>
+      <h1>Enter the Threshold</h1>
+      <p class="text-dim">Choose your alias to join the investigation.</p>
+      <form id="identityForm">
+        <label for="aliasInput" class="sr-only">Your alias</label>
+        <input id="aliasInput" type="text" maxlength="24" placeholder="Your alias" autocomplete="off" required />
+        <button class="btn" type="submit">Enter the threshold</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="confirm-modal" id="confirmModal" hidden>
+    <div class="confirm-modal__panel">
+      <h2 id="confirmModalTitle"></h2>
+      <p id="confirmModalBody"></p>
+      <div class="confirm-modal__actions">
+        <button type="button" class="btn btn--ghost btn--sm" id="confirmModalCancel">Cancel</button>
+        <button type="button" class="btn btn--sm" id="confirmModalConfirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <header class="site-nav">
+    <a class="site-nav__brand" href="/">
+      <svg class="eclipse-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="13" fill="var(--signal)" />
+        <circle cx="20" cy="13" r="13" fill="var(--ink)" />
+      </svg>
+      Umbral Live
+    </a>
+    <nav class="site-nav__links" aria-label="Primary">
+      <a href="/">Home</a>
+      <a href="/#discover">Discover</a>
+      <a href="/#active">Active Signals</a>
+      <a href="/#archive">Archive</a>
+      <a href="/#saved">Saved Signals</a>
+    </nav>
+    <div class="site-nav__actions">
+      <a class="btn btn--sm" href="/emisor">Open a Frequency</a>
+      <button class="profile-pill" id="profilePill" aria-label="Edit your profile" type="button">
+        <span class="profile-pill__avatar" id="profileAvatar">?</span>
+        <span class="profile-pill__name" id="profileName">Guest</span>
+      </button>
+    </div>
+    <div class="profile-popover" id="profilePopover" hidden>
+      <label for="aliasEditInput" class="sr-only">Your alias</label>
+      <input id="aliasEditInput" type="text" maxlength="24" />
+      <button class="btn btn--sm" id="aliasSaveBtn" type="button">Save</button>
+    </div>
+  </header>
+
+  <main class="watch">
+    <div class="watch-layout">
+      <section class="card player-card">
+        <div class="video-frame bg-signal" id="playerFrame">
+          <video id="remoteVideo" autoplay playsinline controls></video>
+          <div class="room-state"><strong>Waiting for the host.</strong><span>The room discussion stays open.</span></div>
+          <div class="player-overlay">
+            <span class="badge badge--live" id="liveBadge" hidden>Live</span>
+            <span class="badge badge--offline" id="offlineBadge">Off Air</span>
+          </div>
+          <div class="anomaly-overlay" aria-hidden="true">
+            <div class="anomaly-ring"></div>
+            <div class="anomaly-label">Anomaly Detected</div>
+          </div>
+        </div>
+        <p id="status" role="status" aria-live="polite" class="status-text">Press "Join the Investigation" to watch this frequency.</p>
+        <div class="controls">
+          <button id="connectBtn" class="btn">Join the Investigation</button>
+          <button id="disconnectBtn" class="btn btn--ghost" disabled>Leave</button>
+        </div>
+      </section>
+
+      <section class="card info-card">
+        <div class="info-card__head">
+          <div class="host-avatar" id="hostAvatar">?</div>
+          <div>
+            <h1 id="streamTitle">Frequency</h1>
+            <p class="text-dim" id="hostName">Anonymous</p>
+          </div>
+        </div>
+        <div class="info-card__meta">
+          <span class="badge badge--category" id="categoryBadge" hidden></span>
+          <span id="viewerCount" class="text-mono text-dim"></span>
+        </div>
+        <p id="description" class="text-dim"></p>
+        <div class="tag-list" id="tagList"></div>
+        <div class="action-row">
+          <button class="btn btn--ghost btn--sm" id="saveBtn">
+            <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 3h10v14l-5-3.2L5 17V3z"/></svg>
+            Save
+          </button>
+          <button class="btn btn--ghost btn--sm" id="shareBtn">Share</button>
+        </div>
+      </section>
+
+      <section class="card chat-card" id="chatCard">
+        <div class="chat-card__head">
+          <h2>Channel Log</h2>
+          <div class="reaction-row" id="reactionRow"></div>
+        </div>
+        <div class="chat-log-wrap">
+          <div class="chat-log" id="chatLog" aria-live="polite"></div>
+          <button type="button" class="chat-new-pill" id="chatNewPill" hidden>New messages ↓</button>
+        </div>
+        <form class="chat-form" id="chatForm">
+          <label for="chatInput" class="sr-only">Message</label>
+          <input id="chatInput" type="text" placeholder="Transmit a message…" autocomplete="off" />
+          <button class="btn btn--sm" type="submit">Send</button>
+        </form>
+      </section>
+
+      <section class="card recommended-card" id="recommendedCard" hidden>
+        <h2>Other Active Frequencies</h2>
+        <div id="recommendedList"></div>
+      </section>
+    </div>
+  </main>
+  <footer class="site-footer"><p class="site-footer__credit">Created by Gerson Morales — Universidad del Valle de Guatemala, Campus Altiplano</p></footer>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <script src="/firebase-config.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/rooms.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/identity.js"></script>
+  <script src="/js/boot.js"></script>
+  <script src="/js/chat.js"></script>
+  <script src="/js/signal-event.js"></script>
   <script src="/receptor/receptor.js"></script>
 </body>
 </html>

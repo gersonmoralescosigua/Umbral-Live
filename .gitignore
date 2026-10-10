@@ -1,6 +1,10 @@
 node_modules/
 npm-debug.log*
 
+# Firebase CLI local cache
+.firebase/
+firebase-debug.log
+
 # OS files
 .DS_Store
 

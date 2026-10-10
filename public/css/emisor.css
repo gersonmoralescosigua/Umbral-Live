@@ -1,0 +1,53 @@
+/* Broadcast panel (emisor): two layouts driven by [data-live] on .broadcast-layout. */
+
+.broadcast { max-width: 1140px; margin: 0 auto; padding: clamp(1.2rem, 4vw, 2.5rem); }
+.broadcast-head { margin-bottom: 1.5rem; max-width: 60ch; }
+.broadcast-head h1 { font-size: clamp(1.5rem, 3vw, 2rem); margin-bottom: 0.4rem; }
+
+/* Before live: setup form + preview, side by side on desktop. */
+.broadcast-layout {
+  display: grid; grid-template-columns: 1fr; gap: 1.3rem;
+  grid-template-areas: "form" "preview";
+}
+@media (min-width: 960px) {
+  .broadcast-layout { grid-template-columns: 1.05fr 0.95fr; grid-template-areas: "preview form"; }
+}
+
+/* Once live: the stage dominates, chat docks beside it, the strip spans the top. The setup
+   card is pulled out of flow entirely (it becomes a drawer, see below), so nothing sits
+   between the stage and the chat dock. */
+.broadcast-layout[data-live="true"] {
+  grid-template-columns: 1fr; grid-template-areas: "strip" "stage" "chat";
+}
+@media (min-width: 960px) {
+  .broadcast-layout[data-live="true"] { grid-template-columns: 1.4fr 1fr; grid-template-areas: "strip strip" "stage chat"; }
+  .broadcast-layout[data-live="true"] .chat-card { position: sticky; top: 5.5rem; max-height: calc(100vh - 6rem); }
+}
+
+.setup-card { grid-area: form; }
+.preview-card { grid-area: preview; }
+.broadcast-layout[data-live="true"] .preview-card { grid-area: stage; }
+.live-strip { grid-area: strip; }
+.broadcast-layout .chat-card { grid-area: chat; }
+
+.setup-card h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+.room-id-row { display: flex; gap: 0.5rem; }
+.room-id-row input { flex: 1; font-family: var(--font-mono); }
+
+.preview-controls { margin-top: 1rem; }
+.preview-controls .controls { display: flex; gap: 0.6rem; margin-bottom: 0.8rem; flex-wrap: wrap; }
+.media-toggles { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+.toggle-btn svg { flex-shrink: 0; }
+.status-text { color: var(--paper-dim); font-size: 0.9rem; min-height: 1.3em; }
+.status-text.is-error { color: var(--signal-hover); }
+
+.anomaly-trigger { margin-left: auto; }
+
+@media (max-width: 640px) {
+  .room-id-row { flex-direction: column; }
+  .preview-controls .controls { flex-direction: column; }
+  .live-strip { flex-direction: column; align-items: stretch; }
+  .live-strip__spacer { display: none; }
+  .live-strip__actions { justify-content: stretch; }
+  .live-strip__actions .btn { flex: 1; }
+}

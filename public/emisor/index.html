@@ -1,23 +1,214 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Emisor - WebRTC</title>
-  <link rel="stylesheet" href="/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Broadcast — Umbral Live</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/theme.css" />
+  <link rel="stylesheet" href="/css/emisor.css" />
+  <link rel="stylesheet" href="/css/observatory.css" />
 </head>
 <body>
-  <nav><a href="/receptor">Ir al receptor →</a></nav>
-  <h1>Emisor (cámara y micrófono)</h1>
-  <video id="localVideo" autoplay muted playsinline></video>
-  <div class="controls">
-    <button id="startBtn">Iniciar transmisión</button>
-    <button id="stopBtn" disabled>Detener</button>
+  <div id="bootScreen" class="boot-screen" role="status" aria-live="polite">
+    <div class="boot-screen__scope"><div class="boot-screen__sweep"></div></div>
+    <p class="boot-screen__text">The signal is waking.</p>
   </div>
-  <div id="status">Presiona "Iniciar transmisión" para comenzar.</div>
+
+  <div id="identityGate" class="identity-gate" hidden>
+    <div class="identity-gate__panel">
+      <p class="identity-gate__eyebrow">UMBRAL LIVE</p>
+      <h1>Enter the Threshold</h1>
+      <p class="text-dim">Choose your alias to join the investigation.</p>
+      <form id="identityForm">
+        <label for="aliasInput" class="sr-only">Your alias</label>
+        <input id="aliasInput" type="text" maxlength="24" placeholder="Your alias" autocomplete="off" required />
+        <button class="btn" type="submit">Enter the threshold</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="confirm-modal" id="confirmModal" hidden>
+    <div class="confirm-modal__panel">
+      <h2 id="confirmModalTitle"></h2>
+      <p id="confirmModalBody"></p>
+      <div class="confirm-modal__actions">
+        <button type="button" class="btn btn--ghost btn--sm" id="confirmModalCancel">Cancel</button>
+        <button type="button" class="btn btn--sm" id="confirmModalConfirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <header class="site-nav">
+    <a class="site-nav__brand" href="/">
+      <svg class="eclipse-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="13" fill="var(--signal)" />
+        <circle cx="20" cy="13" r="13" fill="var(--ink)" />
+      </svg>
+      Umbral Live
+    </a>
+    <nav class="site-nav__links" aria-label="Primary">
+      <a href="/">Home</a>
+      <a href="/#discover">Discover</a>
+      <a href="/#active">Active Signals</a>
+      <a href="/#archive">Archive</a>
+      <a href="/#saved">Saved Signals</a>
+    </nav>
+    <div class="site-nav__actions">
+      <a class="btn btn--sm btn--ghost" href="/receptor">Watch →</a>
+      <button class="profile-pill" id="profilePill" aria-label="Edit your profile" type="button">
+        <span class="profile-pill__avatar" id="profileAvatar">?</span>
+        <span class="profile-pill__name" id="profileName">Guest</span>
+      </button>
+    </div>
+    <div class="profile-popover" id="profilePopover" hidden>
+      <label for="aliasEditInput" class="sr-only">Your alias</label>
+      <input id="aliasEditInput" type="text" maxlength="24" />
+      <button class="btn btn--sm" id="aliasSaveBtn" type="button">Save</button>
+    </div>
+  </header>
+
+  <main class="broadcast" id="broadcastRoot">
+    <div class="broadcast-head">
+      <h1>Your field station</h1>
+      <p class="text-dim">01 Set the scene · 02 Check your equipment · 03 Open your frequency</p>
+    </div>
+
+    <div class="broadcast-layout" id="broadcastLayout">
+      <div class="card live-strip" id="liveStrip" hidden>
+        <span class="badge badge--live">Live</span>
+        <span class="live-strip__code text-mono" id="liveStripCode"></span>
+        <span class="live-strip__viewers" id="liveStripViewers"></span>
+        <span class="live-strip__spacer"></span>
+        <div class="live-strip__actions">
+          <button type="button" class="btn btn--ghost btn--sm" id="editDetailsBtn">Edit Details</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="shareBtn">Share</button>
+          <button type="button" class="btn btn--danger btn--sm" id="endTransmissionBtn">End Transmission</button>
+        </div>
+      </div>
+
+      <section class="card setup-card" id="setupCard">
+        <button type="button" class="drawer-close" id="drawerCloseBtn" aria-label="Close panel" hidden>×</button>
+        <h2>Configure Your Frequency</h2>
+        <form id="setupForm">
+          <div class="field">
+            <label for="roomIdInput">Frequency code</label>
+            <div class="room-id-row">
+              <input id="roomIdInput" type="text" autocomplete="off" required />
+              <button type="button" class="btn btn--ghost btn--sm" id="regenerateRoomBtn">New code</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="titleInput">Transmission title</label>
+            <input id="titleInput" type="text" maxlength="80" placeholder="e.g. Lights over Cerro Azul" required />
+          </div>
+          <div class="field">
+            <label for="categorySelect">Category</label>
+            <select id="categorySelect" required>
+              <option value="" disabled selected>Choose a category</option>
+              <option>Sightings</option>
+              <option>Legends</option>
+              <option>Case Files</option>
+              <option>Historical Mysteries</option>
+              <option>Cosmic Phenomena</option>
+              <option>Skeptic's Table</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="hostNameInput">Host display name</label>
+            <input id="hostNameInput" type="text" maxlength="40" placeholder="e.g. Field Investigator" />
+          </div>
+          <div class="field">
+            <label for="descriptionInput">Short description</label>
+            <textarea id="descriptionInput" maxlength="240" rows="3" placeholder="What are you investigating in this session?"></textarea>
+          </div>
+          <div class="field">
+            <label for="tagsInput">Tags (comma separated)</label>
+            <input id="tagsInput" type="text" placeholder="ufo, night-vision, live-report" />
+          </div>
+        </form>
+        <button type="button" class="btn" id="saveDetailsBtn" hidden>Save Changes</button>
+      </section>
+      <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+
+      <section class="card preview-card">
+        <div id="roomWarning" class="warning-banner" hidden>
+          <p id="roomWarningText">A transmission is already in progress on this frequency.</p>
+          <button type="button" class="btn btn--sm" id="newFrequencyBtn">Open a new frequency</button>
+        </div>
+
+        <div class="video-frame bg-signal" id="previewFrame">
+          <video id="localVideo" autoplay muted playsinline></video>
+          <div class="video-frame__placeholder" id="cameraOffPlaceholder" hidden>
+            <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="5.5" width="11" height="9" rx="2"/><path d="M13.5 8.5l4-2.3v7.6l-4-2.3"/><line x1="2" y1="4" x2="16" y2="16"/></svg>
+            <span>Camera off</span>
+          </div>
+          <div class="anomaly-overlay" aria-hidden="true">
+            <div class="anomaly-ring"></div>
+            <div class="anomaly-label">Anomaly Detected</div>
+          </div>
+        </div>
+
+        <div class="preview-controls">
+          <div class="media-toggles" id="mediaToggles" hidden>
+            <button type="button" class="btn btn--ghost btn--sm toggle-btn" id="micToggleBtn" aria-pressed="false">
+              <svg class="icon-on" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="7" y="2.5" width="6" height="9" rx="3"/><path d="M4 9.5a6 6 0 0012 0"/><path d="M10 15.5v2.3M7 17.8h6"/></svg>
+              <svg class="icon-off" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" hidden><rect x="7" y="2.5" width="6" height="9" rx="3"/><path d="M4 9.5a6 6 0 0012 0"/><path d="M10 15.5v2.3M7 17.8h6"/><line x1="3" y1="3" x2="17" y2="17"/></svg>
+              <span class="toggle-btn__label">Mic</span>
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm toggle-btn" id="cameraToggleBtn" aria-pressed="false">
+              <svg class="icon-on" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="5.5" width="11" height="9" rx="2"/><path d="M13.5 8.5l4-2.3v7.6l-4-2.3"/></svg>
+              <svg class="icon-off" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" hidden><rect x="2.5" y="5.5" width="11" height="9" rx="2"/><path d="M13.5 8.5l4-2.3v7.6l-4-2.3"/><line x1="2" y1="4" x2="16" y2="16"/></svg>
+              <span class="toggle-btn__label">Camera</span>
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm anomaly-trigger" id="anomalyBtn" hidden>Trigger Anomaly Pulse</button>
+          </div>
+          <div class="controls">
+            <button id="startPreviewBtn" class="btn">Start Preview</button>
+            <button id="openFrequencyBtn" class="btn" hidden>Open Frequency</button>
+            <button id="cancelPreviewBtn" class="btn btn--ghost" hidden>Cancel</button>
+          </div>
+          <div class="live-share">        <div class="input-row" id="liveShareRow" hidden>
+          <input id="shareLink" aria-label="Viewer link" type="text" readonly />
+          <button type="button" id="copyLinkBtn" class="btn btn--ghost btn--sm">Copy</button>
+        </div>
+        <p class="field-note" id="localhostNote" hidden>This link only works on this computer during local development.</p>
+</div>
+          <p id="status" role="status" aria-live="polite" class="status-text">Fill in the form, then start your preview.</p>
+        </div>
+      </section>
+
+      <section class="card chat-card" id="chatCard" hidden>
+        <div class="chat-card__head">
+          <h2>Channel Log</h2>
+          <div class="reaction-row" id="reactionRow"></div>
+        </div>
+        <div class="chat-log-wrap">
+          <div class="chat-log" id="chatLog" aria-live="polite"></div>
+          <button type="button" class="chat-new-pill" id="chatNewPill" hidden>New messages ↓</button>
+        </div>
+        <form class="chat-form" id="chatForm">
+          <label for="chatInput" class="sr-only">Message</label>
+          <input id="chatInput" type="text" placeholder="Transmit a message…" autocomplete="off" />
+          <button class="btn btn--sm" type="submit">Send</button>
+        </form>
+      </section>
+    </div>
+  </main>
+  <footer class="site-footer"><p class="site-footer__credit">Created by Gerson Morales — Universidad del Valle de Guatemala, Campus Altiplano</p></footer>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <script src="/firebase-config.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/rooms.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/identity.js"></script>
+  <script src="/js/boot.js"></script>
+  <script src="/js/chat.js"></script>
+  <script src="/js/signal-event.js"></script>
   <script src="/emisor/emisor.js"></script>
 </body>
 </html>

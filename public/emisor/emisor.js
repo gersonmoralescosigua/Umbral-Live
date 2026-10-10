@@ -1,109 +1,470 @@
-// Lado "emisor": captura cámara/micrófono local y los transmite al receptor vía WebRTC.
+// Lado "emisor": captura cámara/micrófono local y los transmite a varios receptores vía WebRTC.
+// Se abre un RTCPeerConnection por receptor; la señalización de cada uno vive en
+// rooms/{roomId}/viewers/{viewerId}/{offer,answer,callerCandidates,calleeCandidates}.
+// Los metadatos de la sala viven aparte en roomsMeta/{roomId}; el chat en roomChat/{roomId}/messages;
+// el evento de señal en roomEvents/{roomId}/latest.
+// Flujo en tres fases: Setup -> Start Preview (cámara local, nadie puede unirse todavía) ->
+// Open Frequency (en vivo: el panel de configuración se convierte en un drawer, aparece la franja
+// en vivo y el chat se ancla junto al video).
 const localVideo = document.getElementById('localVideo');
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
 const statusEl = document.getElementById('status');
+const previewFrame = document.getElementById('previewFrame');
+const cameraOffPlaceholder = document.getElementById('cameraOffPlaceholder');
+const broadcastLayout = document.getElementById('broadcastLayout');
 
-let pc = null; // RTCPeerConnection activa
-let localStream = null; // Stream de cámara/micrófono local
-let roomRef = null; // Referencia a Firebase para la señalización (rooms/main)
-let answerListenerRef = null; // Listener de la respuesta (answer) del receptor
-let calleeCandidatesRef = null; // Listener de los ICE candidates del receptor
+const setupForm = document.getElementById('setupForm');
+const setupCard = document.getElementById('setupCard');
+const roomIdInput = document.getElementById('roomIdInput');
+const regenerateRoomBtn = document.getElementById('regenerateRoomBtn');
+const titleInput = document.getElementById('titleInput');
+const categorySelect = document.getElementById('categorySelect');
+const hostNameInput = document.getElementById('hostNameInput');
+const descriptionInput = document.getElementById('descriptionInput');
+const tagsInput = document.getElementById('tagsInput');
+const detailFields = [titleInput, categorySelect, hostNameInput, descriptionInput, tagsInput];
+const roomLockFields = [roomIdInput, regenerateRoomBtn];
+const saveDetailsBtn = document.getElementById('saveDetailsBtn');
+const drawerCloseBtn = document.getElementById('drawerCloseBtn');
+const drawerBackdrop = document.getElementById('drawerBackdrop');
 
-function setStatus(text) {
+const mediaToggles = document.getElementById('mediaToggles');
+const micToggleBtn = document.getElementById('micToggleBtn');
+const cameraToggleBtn = document.getElementById('cameraToggleBtn');
+const anomalyBtn = document.getElementById('anomalyBtn');
+
+const startPreviewBtn = document.getElementById('startPreviewBtn');
+const openFrequencyBtn = document.getElementById('openFrequencyBtn');
+const cancelPreviewBtn = document.getElementById('cancelPreviewBtn');
+
+const roomWarning = document.getElementById('roomWarning');
+const newFrequencyBtn = document.getElementById('newFrequencyBtn');
+
+const liveStrip = document.getElementById('liveStrip');
+const liveStripCode = document.getElementById('liveStripCode');
+const liveStripViewers = document.getElementById('liveStripViewers');
+const editDetailsBtn = document.getElementById('editDetailsBtn');
+const shareBtn = document.getElementById('shareBtn');
+const endTransmissionBtn = document.getElementById('endTransmissionBtn');
+const liveShareRow = document.getElementById('liveShareRow');
+const shareLink = document.getElementById('shareLink');
+const copyLinkBtn = document.getElementById('copyLinkBtn');
+const localhostNote = document.getElementById('localhostNote');
+const chatCard = document.getElementById('chatCard');
+
+let previewRequest = 0;
+let opening = false;
+let ending = false;
+let localStream = null; // Stream de cámara/micrófono local (se captura una sola vez, en el preview)
+let viewersRef = null; // Referencia a Firebase con todos los receptores (rooms/{roomId}/viewers)
+let metaRef = null; // Referencia a roomsMeta/{roomId}, solo mientras se está en vivo
+let roomId = null; // Sala actual, fijada al abrir la frecuencia (no al iniciar el preview)
+let ROOM_PATH = null;
+const peers = new Map(); // viewerId -> { pc, base, pending } (una conexión por receptor)
+
+function setStatus(text, isError) {
   statusEl.textContent = text;
+  statusEl.classList.toggle('is-error', !!isError);
 }
 
-async function start() {
-  startBtn.disabled = true;
-  setStatus('Solicitando acceso a cámara y micrófono...');
+function updateStatus() {
+  const connected = [...peers.values()].filter((p) => p.pc.connectionState === 'connected').length;
+  setStatus(`Broadcasting to ${connected} viewer(s). Waiting for more connections...`);
+  liveStripViewers.textContent = connected + (connected === 1 ? ' viewer' : ' viewers');
+  if (metaRef) metaRef.child('viewerCount').set(connected).catch(() => {});
+}
 
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  } catch (err) {
-    setStatus('Error al acceder a cámara/micrófono: ' + err.message);
-    startBtn.disabled = false;
+// Agrega un ICE candidate del receptor; si aún no hay answer, lo guarda para después.
+function addCandidate(peer, candidate) {
+  if (!peer.pc.remoteDescription) {
+    peer.pending.push(candidate);
     return;
   }
+  peer.pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+}
 
-  localVideo.srcObject = localStream;
+// Crea la conexión dedicada a un receptor y le envía la oferta.
+async function addViewer(id) {
+  if (!localStream || peers.has(id)) return;
 
-  roomRef = db.ref(ROOM_PATH);
-  // Limpia cualquier sesión anterior antes de iniciar una nueva.
-  await roomRef.remove();
+  const base = viewersRef.child(id);
+  const pc = new RTCPeerConnection(RTC_CONFIG);
+  const peer = { pc, base, pending: [] };
+  peers.set(id, peer);
 
-  pc = new RTCPeerConnection(RTC_CONFIG);
-  // Agrega las pistas de audio/video locales para que se envíen al receptor.
+  // Todos los receptores comparten las mismas pistas (la cámara se captura una vez).
   localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
-  // Cada ICE candidate propio se publica en Firebase para que el receptor lo use.
-  const callerCandidatesRef = roomRef.child('callerCandidates');
   pc.onicecandidate = (event) => {
     if (event.candidate) {
-      callerCandidatesRef.push(event.candidate.toJSON());
+      base.child('callerCandidates').push(event.candidate.toJSON());
     }
   };
 
   pc.onconnectionstatechange = () => {
-    setStatus('Estado de conexión: ' + pc.connectionState);
+    // Si la conexión falla, se borra el nodo: el receptor lo detecta y se vuelve a unir.
+    if (pc.connectionState === 'failed') base.remove();
+    updateStatus();
   };
 
-  // Crea y publica la oferta SDP (paso inicial del handshake WebRTC).
+  // Limpia restos de una sesión anterior de este mismo receptor.
+  await Promise.all(
+    ['offer', 'answer', 'callerCandidates', 'calleeCandidates'].map((key) => base.child(key).remove())
+  );
+  if (peers.get(id) !== peer) return; // el receptor se fue mientras se limpiaba
+
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  await roomRef.child('offer').set({ type: offer.type, sdp: offer.sdp });
+  await base.child('offer').set({ type: offer.type, sdp: offer.sdp });
 
-  setStatus('Oferta enviada. Esperando a que el receptor se conecte...');
-
-  // Espera a que el receptor publique su respuesta (answer) para completar el handshake.
-  answerListenerRef = roomRef.child('answer');
-  answerListenerRef.on('value', async (snapshot) => {
+  // Espera la respuesta (answer) de ESTE receptor.
+  base.child('answer').on('value', async (snapshot) => {
     const answer = snapshot.val();
-    if (answer && pc && !pc.currentRemoteDescription) {
+    if (answer && !pc.remoteDescription) {
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      setStatus('Receptor conectado. Transmitiendo...');
+      peer.pending.splice(0).forEach((c) => addCandidate(peer, c));
     }
   });
 
-  // Escucha los ICE candidates que publica el receptor y los agrega a la conexión.
-  calleeCandidatesRef = roomRef.child('calleeCandidates');
-  calleeCandidatesRef.on('child_added', (snapshot) => {
+  // Escucha los ICE candidates de ESTE receptor.
+  base.child('calleeCandidates').on('child_added', (snapshot) => {
     const candidate = snapshot.val();
-    if (candidate && pc) {
-      pc.addIceCandidate(new RTCIceCandidate(candidate));
-    }
+    if (candidate) addCandidate(peer, candidate);
   });
-
-  stopBtn.disabled = false;
 }
 
-async function stop() {
-  stopBtn.disabled = true;
+// Cierra solo la conexión de un receptor que se fue.
+function removeViewer(id) {
+  const peer = peers.get(id);
+  if (!peer) return;
+  peers.delete(id);
+  peer.base.child('answer').off();
+  peer.base.child('calleeCandidates').off();
+  peer.pc.close();
+  updateStatus();
+}
 
-  // Deja de escuchar cambios en Firebase antes de limpiar el estado.
-  if (answerListenerRef) answerListenerRef.off();
-  if (calleeCandidatesRef) calleeCandidatesRef.off();
+// Mensajes legibles para los errores más comunes de getUserMedia.
+function describeMediaError(err) {
+  const messages = {
+    NotAllowedError: 'Permission denied. Enable camera and microphone access for this site and try again.',
+    NotFoundError: 'No camera or microphone was found on this device.',
+    NotReadableError: 'Your camera or microphone is already in use by another application.',
+    OverconstrainedError: "Your camera doesn't support the requested configuration.",
+  };
+  return messages[err.name] || ('Could not access camera or microphone: ' + err.message);
+}
 
-  if (pc) {
-    pc.close();
-    pc = null;
+// Limpia el código de sala escrito a mano y confirma que sea válido.
+function readRoomId() {
+  const cleaned = slugify(roomIdInput.value);
+  if (!isValidRoomId(cleaned)) return null;
+  roomIdInput.value = cleaned;
+  return cleaned;
+}
+
+function setToggleState(button, isOff, offLabel, onLabel) {
+  button.querySelector('.icon-on').hidden = isOff;
+  button.querySelector('.icon-off').hidden = !isOff;
+  button.querySelector('.toggle-btn__label').textContent = isOff ? offLabel : onLabel;
+  button.classList.toggle('is-off', isOff);
+  button.setAttribute('aria-pressed', String(isOff));
+}
+
+// Controles reales: cambian MediaStreamTrack.enabled del stream ya capturado, sin renegociar WebRTC.
+function toggleMic() {
+  const track = localStream && localStream.getAudioTracks()[0];
+  if (!track) return;
+  track.enabled = !track.enabled;
+  setToggleState(micToggleBtn, !track.enabled, 'Mic Off', 'Mic');
+}
+
+function toggleCamera() {
+  const track = localStream && localStream.getVideoTracks()[0];
+  if (!track) return;
+  track.enabled = !track.enabled;
+  setToggleState(cameraToggleBtn, !track.enabled, 'Camera Off', 'Camera');
+  cameraOffPlaceholder.hidden = track.enabled;
+}
+
+async function startPreview() {
+  if (localStream || !setupForm.reportValidity()) return;
+  if (!readRoomId()) {
+    setStatus('Frequency code must be 3–40 letters, numbers or hyphens.', true);
+    return;
   }
+  const request = ++previewRequest;
+  startPreviewBtn.disabled = true;
+  startPreviewBtn.classList.add('is-loading');
+  cancelPreviewBtn.hidden = false;
+  setStatus('Allow camera and microphone access in your browser, or cancel.');
+  try {
+    if (!navigator.mediaDevices) throw { name: 'NotAllowedError', message: 'A secure connection is required.' };
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    if (request !== previewRequest) { stream.getTracks().forEach(track => track.stop()); return; }
+    localStream = stream;
+  } catch (err) {
+    if (request !== previewRequest) return;
+    setStatus(describeMediaError(err), true);
+    cancelPreviewBtn.hidden = true;
+    startPreviewBtn.disabled = false;
+    startPreviewBtn.classList.remove('is-loading');
+    return;
+  }
+  startPreviewBtn.classList.remove('is-loading');
+  localVideo.srcObject = localStream;
+  previewFrame.classList.add('has-media');
+  setToggleState(micToggleBtn, false, 'Mic Off', 'Mic');
+  setToggleState(cameraToggleBtn, false, 'Camera Off', 'Camera');
+  cameraOffPlaceholder.hidden = true;
+  micToggleBtn.onclick = toggleMic;
+  cameraToggleBtn.onclick = toggleCamera;
+  mediaToggles.hidden = false;
+  startPreviewBtn.hidden = true;
+  openFrequencyBtn.hidden = false;
+  openFrequencyBtn.disabled = false;
+  cancelPreviewBtn.hidden = false;
+  setStatus("Preview ready. Viewers can't see this yet.");
+}
 
+// Preview ready -> en vivo: valida disponibilidad de la sala y recién ahí escribe en Firebase.
+async function openFrequency() {
+  if (opening || !localStream || metaRef || !setupForm.reportValidity()) return;
+  const chosenRoomId = readRoomId();
+  if (!chosenRoomId) {
+    setStatus('Frequency code must be 3–40 letters, numbers or hyphens.', true);
+    return;
+  }
+  opening = true;
+  openFrequencyBtn.disabled = true;
+  cancelPreviewBtn.disabled = true;
+  roomLockFields.forEach(field => { field.disabled = true; });
+  openFrequencyBtn.classList.add('is-loading');
+  roomWarning.hidden = true;
+  let nextMeta = null;
+  let nextViewers = null;
+  try {
+    const activeSnap = await db.ref('roomsMeta').child(chosenRoomId).child('active').once('value');
+    if (activeSnap.val() === true) {
+      roomWarning.hidden = false;
+      setStatus('This frequency already has a host. Choose a new code.', true);
+      return;
+    }
+    roomId = chosenRoomId;
+    ROOM_PATH = roomPath(roomId);
+    nextMeta = db.ref('roomsMeta').child(roomId);
+    nextViewers = db.ref(ROOM_PATH).child('viewers');
+    // Register disconnect cleanup before publishing the room as active.
+    await nextMeta.child('active').onDisconnect().set(false);
+    await nextViewers.onDisconnect().remove();
+    const tags = tagsInput.value.split(',').map(t => t.trim()).filter(Boolean).slice(0, 5);
+    await nextMeta.set({
+      title: titleInput.value.trim(), category: categorySelect.value,
+      description: descriptionInput.value.trim(), tags,
+      hostName: hostNameInput.value.trim() || getAlias() || 'Anonymous',
+      active: true, viewerCount: 0, createdAt: firebase.database.ServerValue.TIMESTAMP,
+    });
+    metaRef = nextMeta;
+    viewersRef = nextViewers;
+    history.replaceState(null, '', '/emisor?room=' + encodeURIComponent(roomId));
+    viewersRef.on('child_added', snapshot => {
+      addViewer(snapshot.key).catch(() => {
+        removeViewer(snapshot.key);
+        setStatus('A viewer could not connect. They can leave and retry.', true);
+      });
+    });
+    viewersRef.on('child_removed', snapshot => removeViewer(snapshot.key));
+    openFrequencyBtn.hidden = true;
+    cancelPreviewBtn.hidden = true;
+    anomalyBtn.hidden = false;
+    broadcastLayout.dataset.live = 'true';
+    setupCard.classList.add('is-drawer');
+    setupCard.inert = true;
+    drawerCloseBtn.hidden = false;
+    saveDetailsBtn.hidden = false;
+    liveStrip.hidden = false;
+    liveStripCode.textContent = roomId;
+    liveStripViewers.textContent = '0 viewers';
+    shareLink.value = location.origin + '/receptor?room=' + encodeURIComponent(roomId);
+    liveShareRow.hidden = false;
+    localhostNote.hidden = !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+    chatCard.hidden = false;
+    initChat(roomId);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    setStatus('Broadcasting. Waiting for the first viewer.');
+  } catch (err) {
+    if (nextViewers) { nextViewers.off(); nextViewers.onDisconnect().cancel().catch(() => {}); }
+    if (nextMeta) {
+      nextMeta.update({ active: false, viewerCount: 0 }).catch(() => {});
+    }
+    metaRef = null; viewersRef = null; roomId = null;
+    setStatus('Could not open this frequency. Check your connection and database access, then retry.', true);
+  } finally {
+    opening = false;
+    openFrequencyBtn.disabled = false;
+    cancelPreviewBtn.disabled = false;
+    roomLockFields.forEach(field => { field.disabled = !!metaRef; });
+    openFrequencyBtn.classList.remove('is-loading');
+  }
+}
+
+// Cancela el preview sin haber salido al aire (no toca Firebase: todavía no se escribió nada).
+function stopPreviewOnly() {
+  if (opening) return;
+  previewRequest++;
+  startPreviewBtn.classList.remove('is-loading');
+  previewFrame.classList.remove('has-media');
   if (localStream) {
     localStream.getTracks().forEach((track) => track.stop());
     localStream = null;
   }
   localVideo.srcObject = null;
-
-  // Elimina la sala para que no queden datos de la sesión anterior.
-  if (roomRef) {
-    await roomRef.remove();
-    roomRef = null;
-  }
-
-  setStatus('Transmisión detenida.');
-  startBtn.disabled = false;
+  mediaToggles.hidden = true;
+  cameraOffPlaceholder.hidden = true;
+  roomWarning.hidden = true;
+  startPreviewBtn.hidden = false;
+  startPreviewBtn.disabled = false;
+  openFrequencyBtn.hidden = true;
+  openFrequencyBtn.disabled = false;
+  cancelPreviewBtn.hidden = true;
+  setStatus('Fill in the form, then start your preview.');
 }
 
-startBtn.addEventListener('click', start);
-stopBtn.addEventListener('click', stop);
+function handleBeforeUnload(event) {
+  event.preventDefault();
+  event.returnValue = '';
+}
+
+async function endTransmission() {
+  if (ending) return;
+  ending = true;
+  endTransmissionBtn.disabled = true;
+  destroyChat();
+  window.removeEventListener('beforeunload', handleBeforeUnload);
+  const oldViewers = viewersRef;
+  const oldMeta = metaRef;
+  if (oldViewers) oldViewers.off();
+  metaRef = null;
+  [...peers.keys()].forEach(removeViewer);
+  if (localStream) localStream.getTracks().forEach(track => track.stop());
+  localStream = null;
+  localVideo.srcObject = null;
+  previewFrame.classList.remove('has-media');
+  // Stop media immediately. Keep server disconnect cleanup until explicit writes succeed.
+  const cleanup = [];
+  if (oldMeta) cleanup.push(oldMeta.update({ active: false, viewerCount: 0, endedAt: firebase.database.ServerValue.TIMESTAMP })
+    .then(() => oldMeta.child('active').onDisconnect().cancel()));
+  if (oldViewers) cleanup.push(oldViewers.remove().then(() => oldViewers.onDisconnect().cancel()));
+  viewersRef = null; roomId = null;
+  closeDrawer();
+  setupCard.classList.remove('is-drawer'); setupCard.inert = false;
+  broadcastLayout.dataset.live = 'false';
+  roomLockFields.forEach(field => { field.disabled = false; });
+  [mediaToggles, cameraOffPlaceholder, anomalyBtn, liveStrip, liveShareRow, localhostNote,
+    saveDetailsBtn, chatCard, drawerCloseBtn, openFrequencyBtn, cancelPreviewBtn].forEach(el => { el.hidden = true; });
+  startPreviewBtn.hidden = false;
+  startPreviewBtn.disabled = false;
+  openFrequencyBtn.disabled = false;
+  setStatus('Transmission ended. Camera and microphone released.');
+  ending = false;
+  endTransmissionBtn.disabled = false;
+  // Firebase may queue writes while offline; this must not freeze the local control room.
+  Promise.all(cleanup).catch(() => notifyUser('Media stopped. Server cleanup could not be confirmed; check your connection.'));
+}
+
+function openDrawer() {
+  setupCard.setAttribute('role', 'dialog');
+  setupCard.setAttribute('aria-label', 'Edit transmission details');
+  setupCard.inert = false;
+  setupCard.classList.add('is-open');
+  drawerBackdrop.hidden = false;
+  requestAnimationFrame(() => { drawerBackdrop.classList.add('is-open'); titleInput.focus(); });
+}
+function closeDrawer() {
+  setupCard.removeAttribute('role');
+  if (broadcastLayout.dataset.live === 'true') { setupCard.inert = true; editDetailsBtn.focus(); }
+  setupCard.classList.remove('is-open');
+  drawerBackdrop.classList.remove('is-open');
+  setTimeout(() => { if (!drawerBackdrop.classList.contains('is-open')) drawerBackdrop.hidden = true; }, 300);
+}
+
+function prefillHostName() {
+  if (!hostNameInput.value.trim()) hostNameInput.value = getAlias();
+}
+document.addEventListener('umbral:alias-changed', prefillHostName);
+window.addEventListener('DOMContentLoaded', prefillHostName);
+
+// Nunca "main" por defecto en una transmisión nueva: solo se respeta si venía explícito en la URL.
+roomIdInput.value = hasExplicitRoomParam() ? getRoomIdFromUrl() : generateRoomId();
+regenerateRoomBtn.addEventListener('click', () => { roomIdInput.value = generateRoomId(); });
+newFrequencyBtn.addEventListener('click', () => { roomIdInput.value = generateRoomId(); roomWarning.hidden = true; });
+copyLinkBtn.addEventListener('click', () => copyRoomLink(shareLink.value, copyLinkBtn));
+
+setupForm.addEventListener('submit', event => event.preventDefault());
+startPreviewBtn.addEventListener('click', startPreview);
+openFrequencyBtn.addEventListener('click', openFrequency);
+cancelPreviewBtn.addEventListener('click', stopPreviewOnly);
+
+endTransmissionBtn.addEventListener('click', async () => {
+  const ok = await confirmAction({
+    title: 'End Transmission?',
+    body: 'Viewers will be disconnected and this frequency will close.',
+    confirmLabel: 'End Transmission',
+    danger: true,
+  });
+  if (ok) endTransmission();
+});
+
+editDetailsBtn.addEventListener('click', openDrawer);
+drawerCloseBtn.addEventListener('click', closeDrawer);
+drawerBackdrop.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && setupCard.classList.contains('is-open')) closeDrawer();
+});
+
+shareBtn.addEventListener('click', () => shareOrCopy(shareLink.value, shareBtn));
+
+saveDetailsBtn.addEventListener('click', async () => {
+  if (!metaRef || !setupForm.reportValidity()) return;
+  saveDetailsBtn.disabled = true;
+  const tags = tagsInput.value.split(',').map((t) => t.trim()).filter(Boolean).slice(0, 5);
+  try {
+  await metaRef.update({
+    title: titleInput.value.trim() || 'Untitled transmission',
+    category: categorySelect.value,
+    description: descriptionInput.value.trim(),
+    tags,
+    hostName: hostNameInput.value.trim() || getAlias() || 'Anonymous',
+  });
+  } catch (err) { notifyUser('Details could not be saved. Please retry.'); return; }
+  finally { saveDetailsBtn.disabled = false; }
+  const original = saveDetailsBtn.textContent;
+  saveDetailsBtn.textContent = 'Saved!';
+  setTimeout(() => { saveDetailsBtn.textContent = original; }, 1500);
+});
+
+// "Anomaly Pulse": un único evento en vivo, con enfriamiento del lado del cliente (no es una
+// barrera de seguridad real — cualquiera con acceso directo al SDK podría saltársela).
+const ANOMALY_COOLDOWN_MS = 20000;
+let anomalyReady = true;
+anomalyBtn.addEventListener('click', async () => {
+  if (!anomalyReady || !roomId || !metaRef) return;
+  anomalyReady = false;
+  anomalyBtn.disabled = true;
+  const original = anomalyBtn.textContent;
+  anomalyBtn.textContent = 'Cooling down…';
+  try {
+  await db.ref('roomEvents').child(roomId).child('latest').set({
+    type: 'anomaly',
+    alias: getAlias() || 'Host',
+    firedAt: firebase.database.ServerValue.TIMESTAMP,
+  });
+  playAnomaly(previewFrame);
+  } catch (err) { anomalyReady = true; anomalyBtn.disabled = false; anomalyBtn.textContent = original; notifyUser('Signal event was not delivered. Please retry.'); return; }
+  setTimeout(() => {
+    anomalyReady = true;
+    anomalyBtn.disabled = false;
+    anomalyBtn.textContent = original;
+  }, ANOMALY_COOLDOWN_MS);
+});
+
+guardRoomNavigation(() => !!metaRef, endTransmission, true);

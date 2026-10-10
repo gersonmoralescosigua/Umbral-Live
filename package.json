@@ -1,7 +1,7 @@
 {
-  "name": "webrtc-firebase-demo",
+  "name": "umbral-live",
   "version": "1.0.0",
-  "description": "Emisor/Receptor de video y audio por WebRTC usando Firebase Realtime Database como servidor de señalización",
+  "description": "Umbral Live — plataforma de streaming P2P (WebRTC) con señalización, salas, chat y eventos en tiempo real sobre Firebase Realtime Database",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

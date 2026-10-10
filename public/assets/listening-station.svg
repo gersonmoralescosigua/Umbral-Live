@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1000">
+<defs>
+ <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#112a2b"/><stop offset="1" stop-color="#061313"/></linearGradient>
+ <radialGradient id="halo"><stop stop-color="#b7d6ba" stop-opacity=".5"/><stop offset=".35" stop-color="#60908a" stop-opacity=".2"/><stop offset="1" stop-color="#173b38" stop-opacity="0"/></radialGradient>
+ <linearGradient id="lake" x2="0" y2="1"><stop stop-color="#719489" stop-opacity=".3"/><stop offset="1" stop-color="#071514"/></linearGradient>
+ <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0H0V60" fill="none" stroke="#c5d0b1" stroke-opacity=".07"/></pattern>
+ <pattern id="water" width="150" height="22" patternUnits="userSpaceOnUse"><path d="M0 10h45m25 0h12m20 6h48" stroke="#a9c3b2" stroke-opacity=".12"/></pattern>
+</defs>
+<path fill="url(#sky)" d="M0 0h1200v1000H0z"/><circle cx="670" cy="360" r="430" fill="url(#halo)"/>
+<path fill="url(#grid)" d="M0 0h1200v1000H0z"/>
+<g fill="none" stroke="#b1cabb"><circle cx="670" cy="355" r="186" opacity=".12"/><circle cx="670" cy="355" r="225" stroke-dasharray="2 14" opacity=".22"/><path d="M670 90v48m0 434v48M405 355h48m434 0h48" opacity=".4"/></g>
+<circle cx="670" cy="355" r="125" fill="#bec6a3"/><circle cx="701" cy="327" r="124" fill="#142d2b"/>
+<path d="M0 609L83 559 145 593 255 412 362 550 449 508 527 599 682 529 769 574 853 476 980 614 1101 515 1200 578V790H0" fill="#1b3632"/>
+<path d="M0 673l90-43 97 55 120-85 129 96 103-46 154 55 145-59 128 72 126-80 108 33v129H0" fill="#0c2524"/>
+<path d="M0 712Q500 679 1200 714v286H0" fill="url(#lake)"/><path d="M0 718h1200v282H0" fill="url(#water)"/>
+<g stroke="#a9c3b2" opacity=".25"><path d="M622 738h86m-105 18h127m-145 18h152m-151 22h155m-163 24h169m-180 24h190m-193 28h190m-207 31h218"/></g>
+<path d="M0 854l74-18 52 35 111-7 84 66 108 21 95 49H0zM1200 788l-68 44-73-12-102 105-53 20-23 55h319z" fill="#061514"/>
+<g fill="none" stroke="#040d0e" stroke-width="7"><path d="M170 879l34-282 34 282m-67-9 63-74-51-67 38-75-18-42M180 773h49M186 706h36M193 646h21"/><path d="M204 598V455m-57 55h114m-99 23h84m-74 24h64" stroke-width="4"/></g>
+<g fill="#bcc8b6" font-family="monospace" font-size="13" letter-spacing="3"><text x="50" y="64" opacity=".65">UMBRAL / FIELD STATION</text><text x="50" y="933" opacity=".65">ILLUSTRATED SIGNAL LANDSCAPE</text><text x="868" y="64" opacity=".65">OBSERVATION 001</text></g>
+<g fill="none" stroke="#afc4ac" opacity=".45"><path d="M45 100V82h18m1074 18V82h-18M45 900v18h18m1074-18v18h-18"/><path d="M1047 210v40m-20-20h40"/></g>
+</svg>

@@ -1,0 +1,50 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "roomsMeta": {
+      ".read": true,
+      "$roomId": {
+        ".write": true,
+        "title": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 120)" },
+        "category": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 60)" },
+        "description": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500)" },
+        "hostName": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 60)" },
+        "active": { ".validate": "!newData.exists() || newData.isBoolean()" },
+        "viewerCount": { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)" }
+      }
+    },
+
+    "rooms": {
+      "$roomId": {
+        "viewers": {
+          ".read": true,
+          ".write": true
+        }
+      }
+    },
+
+    "roomChat": {
+      "$roomId": {
+        "messages": {
+          ".read": true,
+          "$messageId": {
+            ".write": true,
+            "text": { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "alias": { ".validate": "newData.isString() && newData.val().length <= 24" }
+          }
+        }
+      }
+    },
+
+    "roomEvents": {
+      "$roomId": {
+        "latest": {
+          ".read": true,
+          ".write": true
+        }
+      }
+    }
+  }
+}

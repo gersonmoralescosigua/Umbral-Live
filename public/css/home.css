@@ -1,0 +1,58 @@
+/* Home / discovery — five sections, each a different visual register:
+   atmospheric hero -> Discover tiles -> dense Active Signals list -> textured Archive -> Saved list. */
+
+.hero {
+  position: relative; overflow: hidden;
+  padding: clamp(3.2rem, 9vw, 7rem) clamp(1rem, 4vw, 2.5rem);
+  border-bottom: 1px solid var(--border);
+  min-height: 380px; display: flex; align-items: center;
+}
+.hero__content { position: relative; z-index: 1; max-width: 640px; }
+.hero__eyebrow { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.78rem; color: var(--data); margin-bottom: 0.9rem; }
+.hero__content h1 { font-size: clamp(2rem, 5vw, 3.4rem); margin-bottom: 1rem; max-width: 20ch; }
+.hero__sub { color: var(--paper-dim); max-width: 50ch; margin-bottom: 1.6rem; font-size: 1.02rem; }
+.hero__actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.hero__meta { color: var(--paper-faint); }
+.hero__teaser { margin-top: 0.3rem; }
+.hero .badge--live { margin-bottom: 0.9rem; }
+
+.section-head { padding: 2.6rem clamp(1rem, 4vw, 2.5rem) 0; }
+.section-head h2 { font-size: 1rem; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--paper-dim); margin-bottom: 0.4rem; }
+.section-head p { color: var(--paper-faint); font-size: 0.88rem; max-width: 60ch; }
+
+.discover { padding: 1rem clamp(1rem, 4vw, 2.5rem) 0.5rem; }
+
+.frequencies { padding: 1.2rem clamp(1rem, 4vw, 2.5rem) 3rem; }
+.frequencies__head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.1rem; }
+.frequencies__head h2 { font-size: 1.3rem; font-family: var(--font-display); text-transform: none; letter-spacing: 0; color: var(--paper); }
+
+.empty-state {
+  text-align: center; padding: 3rem 1rem; color: var(--paper-dim);
+  display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
+}
+.empty-state p:first-child { font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.04em; color: var(--data); }
+.empty-state .btn { margin-top: 0.9rem; }
+
+/* Archive: distinct texture (vignette + heavier grain) from the hero's scanning/radar register */
+.archive {
+  position: relative; overflow: hidden;
+  padding: 3.2rem clamp(1rem, 4vw, 2.5rem);
+  border-top: 1px solid var(--border);
+}
+.archive__intro { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr; gap: 2rem; margin-bottom: 2rem; }
+@media (min-width: 860px) {
+  .archive__intro { grid-template-columns: 0.8fr 1.2fr; align-items: center; }
+}
+.archive__mark { min-height: 200px; border-radius: var(--radius-md); position: relative; overflow: hidden; }
+.archive__content h2 { font-size: clamp(1.4rem, 3vw, 2rem); margin: 0.6rem 0 1.1rem; max-width: 22ch; }
+.archive__content p { color: var(--paper-dim); max-width: 60ch; margin-bottom: 1rem; }
+.archive__content p:last-child { margin-bottom: 0; }
+.archive__list-wrap { position: relative; z-index: 1; }
+.archive__list-wrap h3 { font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--paper-dim); margin-bottom: 0.9rem; }
+
+.saved { padding: 1.2rem clamp(1rem, 4vw, 2.5rem) 3.5rem; }
+
+@media (max-width: 640px) {
+  .hero { min-height: 0; }
+}
