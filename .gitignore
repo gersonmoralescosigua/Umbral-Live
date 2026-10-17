@@ -10,3 +10,7 @@ firebase-debug.log
 
 # Editor
 .vscode/
+
+# Contexto local de Claude Code: no se sube al repositorio
+CLAUDE.md
+claude.md
