@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/css/theme.css" />
   <link rel="stylesheet" href="/css/receptor.css" />
   <link rel="stylesheet" href="/css/observatory.css" />
+  <link rel="stylesheet" href="/css/reactions.css" />
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" role="status" aria-live="polite">
@@ -85,7 +86,9 @@
             <div class="anomaly-ring"></div>
             <div class="anomaly-label">Anomaly Detected</div>
           </div>
+          <div class="reaction-layer" id="reactionLayer" aria-hidden="true"></div>
         </div>
+        <div class="reaction-bar" id="reactionBar" role="group" aria-label="Send a reaction"></div>
         <p id="status" role="status" aria-live="polite" class="status-text">Press "Join the Investigation" to watch this frequency.</p>
         <div class="controls">
           <button id="connectBtn" class="btn">Join the Investigation</button>
@@ -149,6 +152,7 @@
   <script src="/js/boot.js"></script>
   <script src="/js/chat.js"></script>
   <script src="/js/signal-event.js"></script>
+  <script src="/js/reactions.js"></script>
   <script src="/receptor/receptor.js"></script>
 </body>
 </html>

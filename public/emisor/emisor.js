@@ -31,6 +31,8 @@ const mediaToggles = document.getElementById('mediaToggles');
 const micToggleBtn = document.getElementById('micToggleBtn');
 const cameraToggleBtn = document.getElementById('cameraToggleBtn');
 const anomalyBtn = document.getElementById('anomalyBtn');
+const reactionLayer = document.getElementById('reactionLayer');
+let releaseReactions = () => {}; // libera el listener de reacciones al terminar la transmisión
 
 const startPreviewBtn = document.getElementById('startPreviewBtn');
 const openFrequencyBtn = document.getElementById('openFrequencyBtn');
@@ -289,6 +291,8 @@ async function openFrequency() {
     localhostNote.hidden = !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
     chatCard.hidden = false;
     initChat(roomId);
+    releaseReactions();
+    releaseReactions = listenForReactions(roomId, reactionLayer);
     window.addEventListener('beforeunload', handleBeforeUnload);
     setStatus('Broadcasting. Waiting for the first viewer.');
   } catch (err) {
@@ -339,6 +343,8 @@ async function endTransmission() {
   ending = true;
   endTransmissionBtn.disabled = true;
   destroyChat();
+  releaseReactions();
+  releaseReactions = () => {};
   window.removeEventListener('beforeunload', handleBeforeUnload);
   const oldViewers = viewersRef;
   const oldMeta = metaRef;

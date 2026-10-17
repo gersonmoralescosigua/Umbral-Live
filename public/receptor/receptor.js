@@ -262,4 +262,8 @@ roomsMetaRef.on('child_removed', (snapshot) => { otherRooms.delete(snapshot.key)
 initChat(roomId);
 listenForSignalEvents(roomId, document.getElementById('playerFrame'));
 
+const reactionLayer = document.getElementById('reactionLayer');
+initReactionBar(roomId, document.getElementById('reactionBar'), reactionLayer);
+listenForReactions(roomId, reactionLayer);
+
 guardRoomNavigation(() => wantConnected, disconnect, false);

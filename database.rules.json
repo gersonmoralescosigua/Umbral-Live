@@ -38,6 +38,19 @@
       }
     },
 
+    "roomReactions": {
+      "$roomId": {
+        ".read": true,
+        "$reactionId": {
+          ".write": true,
+          ".validate": "newData.hasChildren(['type', 'ts'])",
+          "type": { ".validate": "newData.isString() && (newData.val() === 'heart' || newData.val() === 'spark' || newData.val() === 'ring' || newData.val() === 'wave' || newData.val() === 'question')" },
+          "ts": { ".validate": "newData.isNumber()" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+
     "roomEvents": {
       "$roomId": {
         "latest": {
