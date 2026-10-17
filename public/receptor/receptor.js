@@ -3,7 +3,9 @@
 const roomId = getRoomIdFromUrl();
 const ROOM_PATH = roomPath(roomId);
 
-const remoteVideo = document.getElementById('remoteVideo');
+const remoteVideo = document.getElementById('remoteVideo'); // cámara + micrófono del emisor
+const remoteScreenVideo = document.getElementById('remoteScreenVideo'); // pantalla compartida
+const cameraOffState = document.getElementById('cameraOffState');
 const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
 const statusEl = document.getElementById('status');
@@ -21,6 +23,41 @@ function setStatus(text) {
   statusEl.textContent = text;
 }
 
+// Escena: el emisor avisa por un canal de datos si comparte pantalla y si tiene la cámara encendida.
+let layout = { screen: false, camera: true };
+let swapped = false; // el espectador intercambió pantalla y cámara tocando el cuadrito
+
+function renderStage() {
+  const result = applyStageLayout({
+    cameraEl: remoteVideo, screenEl: remoteScreenVideo, offEl: cameraOffState,
+    sharing: layout.screen && !!remoteScreenVideo.srcObject, cameraOn: layout.camera, swapped, controls: true,
+  });
+  swapped = result.swapped; // se desactiva solo si la cámara se apaga o se deja de compartir
+  [remoteVideo, remoteScreenVideo].forEach((el) => {
+    const pip = el.classList.contains('is-pip');
+    el.tabIndex = pip ? 0 : -1;
+    if (pip) el.setAttribute('aria-label', 'Swap the camera and the shared screen');
+    else el.removeAttribute('aria-label');
+  });
+}
+
+function handleLayoutMessage(raw) {
+  let message;
+  try { message = JSON.parse(raw); } catch (err) { return; }
+  if (!message || message.type !== 'layout') return;
+  layout = { screen: message.screen === true, camera: message.camera !== false };
+  renderStage();
+}
+
+// Tocar (o Enter / Espacio sobre) el cuadrito intercambia el video principal.
+[remoteVideo, remoteScreenVideo].forEach((el) => {
+  const swap = () => { if (el.classList.contains('is-pip')) { swapped = !swapped; renderStage(); return true; } return false; };
+  el.addEventListener('click', swap);
+  el.addEventListener('keydown', (event) => {
+    if ((event.key === 'Enter' || event.key === ' ') && swap()) event.preventDefault();
+  });
+});
+
 // Se registra con un id propio y espera la oferta que el emisor le prepare.
 async function join() {
   const mySession = ++session;
@@ -34,9 +71,20 @@ async function join() {
   setStatus(hostActive ? 'Connecting to the live signal…' : 'Waiting for the host. You can leave at any time.');
 
   // Al llegar el stream remoto, lo asigna al elemento de video.
+  // El emisor manda dos videos: el primero es la cámara (con el micrófono) y el segundo, la pantalla.
   myPc.ontrack = (event) => {
-    remoteVideo.srcObject = event.streams[0];
+    const videos = myPc.getTransceivers().filter((t) => t.receiver.track.kind === 'video');
+    if (event.track.kind === 'video' && videos.indexOf(event.transceiver) === 1) {
+      remoteScreenVideo.srcObject = event.streams[0] || new MediaStream([event.track]);
+      renderStage();
+    } else if (remoteVideo.srcObject !== event.streams[0]) {
+      remoteVideo.srcObject = event.streams[0];
+    }
     setStatus('Receiving transmission.');
+  };
+
+  myPc.ondatachannel = (event) => {
+    event.channel.onmessage = (message) => { if (mySession === session) handleLayoutMessage(message.data); };
   };
 
   myPc.onconnectionstatechange = () => {
@@ -116,6 +164,10 @@ function teardown() {
   }
 
   remoteVideo.srcObject = null;
+  remoteScreenVideo.srcObject = null;
+  layout = { screen: false, camera: true };
+  swapped = false;
+  renderStage();
   document.querySelector('.room-state').classList.remove('is-receiving');
 }
 

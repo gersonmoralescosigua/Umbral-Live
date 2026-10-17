@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/css/emisor.css" />
   <link rel="stylesheet" href="/css/observatory.css" />
   <link rel="stylesheet" href="/css/reactions.css" />
+  <link rel="stylesheet" href="/css/stage.css" />
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" role="status" aria-live="polite">
@@ -143,6 +144,7 @@
 
         <div class="video-frame bg-signal" id="previewFrame">
           <video id="localVideo" autoplay muted playsinline></video>
+          <video id="localScreenVideo" class="stage-screen is-hidden" autoplay muted playsinline></video>
           <div class="video-frame__placeholder" id="cameraOffPlaceholder" hidden>
             <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="5.5" width="11" height="9" rx="2"/><path d="M13.5 8.5l4-2.3v7.6l-4-2.3"/><line x1="2" y1="4" x2="16" y2="16"/></svg>
             <span>Camera off</span>
@@ -165,6 +167,11 @@
               <svg class="icon-on" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="5.5" width="11" height="9" rx="2"/><path d="M13.5 8.5l4-2.3v7.6l-4-2.3"/></svg>
               <svg class="icon-off" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" hidden><rect x="2.5" y="5.5" width="11" height="9" rx="2"/><path d="M13.5 8.5l4-2.3v7.6l-4-2.3"/><line x1="2" y1="4" x2="16" y2="16"/></svg>
               <span class="toggle-btn__label">Camera</span>
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm toggle-btn" id="screenToggleBtn" aria-pressed="false" hidden>
+              <svg class="icon-on" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="10" rx="1.5"/><path d="M7 17h6M10 13.5V17"/></svg>
+              <svg class="icon-off" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" hidden><rect x="2.5" y="3.5" width="15" height="10" rx="1.5"/><path d="M7 17h6M10 13.5V17"/><line x1="3" y1="3" x2="17" y2="15"/></svg>
+              <span class="toggle-btn__label">Share Screen</span>
             </button>
             <button type="button" class="btn btn--ghost btn--sm anomaly-trigger" id="anomalyBtn" hidden>Trigger Anomaly Pulse</button>
           </div>
@@ -212,6 +219,7 @@
   <script src="/js/chat.js"></script>
   <script src="/js/signal-event.js"></script>
   <script src="/js/reactions.js"></script>
+  <script src="/js/stage-layout.js"></script>
   <script src="/emisor/emisor.js"></script>
 </body>
 </html>

@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/css/receptor.css" />
   <link rel="stylesheet" href="/css/observatory.css" />
   <link rel="stylesheet" href="/css/reactions.css" />
+  <link rel="stylesheet" href="/css/stage.css" />
 </head>
 <body>
   <div id="bootScreen" class="boot-screen" role="status" aria-live="polite">
@@ -76,7 +77,9 @@
     <div class="watch-layout">
       <section class="card player-card">
         <div class="video-frame bg-signal" id="playerFrame">
-          <video id="remoteVideo" autoplay playsinline controls></video>
+          <video id="remoteVideo" class="stage-swappable" autoplay playsinline controls></video>
+          <video id="remoteScreenVideo" class="stage-screen stage-swappable is-hidden" autoplay playsinline></video>
+          <div class="camera-off-state" id="cameraOffState" hidden>Camera is off</div>
           <div class="room-state"><strong>Waiting for the host.</strong><span>The room discussion stays open.</span></div>
           <div class="player-overlay">
             <span class="badge badge--live" id="liveBadge" hidden>Live</span>
@@ -153,6 +156,7 @@
   <script src="/js/chat.js"></script>
   <script src="/js/signal-event.js"></script>
   <script src="/js/reactions.js"></script>
+  <script src="/js/stage-layout.js"></script>
   <script src="/receptor/receptor.js"></script>
 </body>
 </html>

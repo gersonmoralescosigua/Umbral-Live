@@ -7,6 +7,7 @@
 // Open Frequency (en vivo: el panel de configuración se convierte en un drawer, aparece la franja
 // en vivo y el chat se ancla junto al video).
 const localVideo = document.getElementById('localVideo');
+const localScreenVideo = document.getElementById('localScreenVideo');
 const statusEl = document.getElementById('status');
 const previewFrame = document.getElementById('previewFrame');
 const cameraOffPlaceholder = document.getElementById('cameraOffPlaceholder');
@@ -30,6 +31,7 @@ const drawerBackdrop = document.getElementById('drawerBackdrop');
 const mediaToggles = document.getElementById('mediaToggles');
 const micToggleBtn = document.getElementById('micToggleBtn');
 const cameraToggleBtn = document.getElementById('cameraToggleBtn');
+const screenToggleBtn = document.getElementById('screenToggleBtn');
 const anomalyBtn = document.getElementById('anomalyBtn');
 const reactionLayer = document.getElementById('reactionLayer');
 let releaseReactions = () => {}; // libera el listener de reacciones al terminar la transmisión
@@ -57,6 +59,9 @@ let previewRequest = 0;
 let opening = false;
 let ending = false;
 let localStream = null; // Stream de cámara/micrófono local (se captura una sola vez, en el preview)
+let screenStream = null; // Stream de la pantalla compartida; null mientras no se comparte
+// Stream "vacío" que solo da identidad (msid) al video de pantalla de cada conexión.
+const screenOutStream = new MediaStream();
 let viewersRef = null; // Referencia a Firebase con todos los receptores (rooms/{roomId}/viewers)
 let metaRef = null; // Referencia a roomsMeta/{roomId}, solo mientras se está en vivo
 let roomId = null; // Sala actual, fijada al abrir la frecuencia (no al iniciar el preview)
@@ -95,6 +100,17 @@ async function addViewer(id) {
 
   // Todos los receptores comparten las mismas pistas (la cámara se captura una vez).
   localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+
+  // La pantalla viaja en un segundo video, creado desde la oferta inicial (siempre el último
+  // m-line de video: el receptor lo reconoce por su posición). Se activa y se apaga con
+  // replaceTrack, así no hace falta renegociar WebRTC al empezar o parar de compartir.
+  const screenTransceiver = pc.addTransceiver('video', { direction: 'sendonly', streams: [screenOutStream] });
+  peer.screenSender = screenTransceiver.sender;
+  if (screenStream) peer.screenSender.replaceTrack(screenStream.getVideoTracks()[0]).catch(() => {});
+
+  // Canal de datos para avisar al receptor del estado de la escena (pantalla / cámara encendidas).
+  peer.channel = pc.createDataChannel('layout');
+  peer.channel.onopen = () => sendLayoutState([peer]);
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
@@ -185,7 +201,77 @@ function toggleCamera() {
   if (!track) return;
   track.enabled = !track.enabled;
   setToggleState(cameraToggleBtn, !track.enabled, 'Camera Off', 'Camera');
-  cameraOffPlaceholder.hidden = track.enabled;
+  renderStage();
+  sendLayoutState();
+}
+
+// Activa (track) o apaga (null) el video de pantalla de todas las conexiones, sin renegociar WebRTC.
+function setScreenTrack(track) {
+  peers.forEach(({ screenSender }) => {
+    if (screenSender) screenSender.replaceTrack(track).catch(() => {});
+  });
+}
+
+function cameraIsOn() {
+  const camera = localStream && localStream.getVideoTracks()[0];
+  return !!(camera && camera.enabled);
+}
+
+// Estado de la escena que ven los receptores: ¿hay pantalla? ¿hay cámara?
+function sendLayoutState(targets = [...peers.values()]) {
+  const message = JSON.stringify({ type: 'layout', screen: !!screenStream, camera: cameraIsOn() });
+  targets.forEach((peer) => {
+    if (peer.channel && peer.channel.readyState === 'open') peer.channel.send(message);
+  });
+}
+
+// Preview del emisor: misma escena que verán los receptores (pantalla grande + cámara en cuadrito).
+function renderStage() {
+  applyStageLayout({
+    cameraEl: localVideo, screenEl: localScreenVideo, offEl: cameraOffPlaceholder,
+    sharing: !!screenStream, cameraOn: cameraIsOn(), swapped: false,
+  });
+}
+
+// Compartir pantalla: cámara y pantalla salen a la vez. El micrófono sigue siendo el audio.
+async function startScreenShare() {
+  if (screenStream || !localStream) return;
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: false });
+  } catch (err) {
+    const cancelled = err.name === 'NotAllowedError';
+    setStatus(cancelled ? 'Screen sharing was cancelled.' : 'Could not share your screen: ' + err.message, !cancelled);
+    return;
+  }
+  if (!localStream) { stream.getTracks().forEach((track) => track.stop()); return; } // se canceló el preview mientras elegía
+  const track = stream.getVideoTracks()[0];
+  track.contentHint = 'detail'; // prioriza nitidez del texto sobre fluidez
+  track.addEventListener('ended', stopScreenShare); // botón nativo "Dejar de compartir" del navegador
+  screenStream = stream;
+  setScreenTrack(track);
+  localScreenVideo.srcObject = stream;
+  renderStage();
+  sendLayoutState();
+  setToggleState(screenToggleBtn, true, 'Stop Sharing', 'Share Screen');
+  setStatus('Sharing your screen. Viewers see it live.');
+}
+
+function stopScreenShare() {
+  if (!screenStream) return;
+  const stream = screenStream;
+  screenStream = null;
+  sendLayoutState(); // primero se avisa a los receptores, luego se corta el video
+  setScreenTrack(null);
+  stream.getTracks().forEach((track) => track.stop());
+  localScreenVideo.srcObject = null;
+  renderStage();
+  setToggleState(screenToggleBtn, false, 'Stop Sharing', 'Share Screen');
+  setStatus('Screen sharing stopped.');
+}
+
+function toggleScreenShare() {
+  if (screenStream) stopScreenShare(); else startScreenShare();
 }
 
 async function startPreview() {
@@ -217,9 +303,13 @@ async function startPreview() {
   previewFrame.classList.add('has-media');
   setToggleState(micToggleBtn, false, 'Mic Off', 'Mic');
   setToggleState(cameraToggleBtn, false, 'Camera Off', 'Camera');
-  cameraOffPlaceholder.hidden = true;
+  renderStage();
   micToggleBtn.onclick = toggleMic;
   cameraToggleBtn.onclick = toggleCamera;
+  // getDisplayMedia no existe en la mayoría de navegadores móviles: ahí el botón no se muestra.
+  screenToggleBtn.hidden = !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  setToggleState(screenToggleBtn, false, 'Stop Sharing', 'Share Screen');
+  screenToggleBtn.onclick = toggleScreenShare;
   mediaToggles.hidden = false;
   startPreviewBtn.hidden = true;
   openFrequencyBtn.hidden = false;
@@ -317,6 +407,7 @@ function stopPreviewOnly() {
   previewRequest++;
   startPreviewBtn.classList.remove('is-loading');
   previewFrame.classList.remove('has-media');
+  stopScreenShare();
   if (localStream) {
     localStream.getTracks().forEach((track) => track.stop());
     localStream = null;
@@ -351,6 +442,7 @@ async function endTransmission() {
   if (oldViewers) oldViewers.off();
   metaRef = null;
   [...peers.keys()].forEach(removeViewer);
+  stopScreenShare();
   if (localStream) localStream.getTracks().forEach(track => track.stop());
   localStream = null;
   localVideo.srcObject = null;

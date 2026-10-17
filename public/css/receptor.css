@@ -23,6 +23,8 @@
 .recommended-card { grid-area: recommended; }
 
 .player-overlay { position: absolute; top: 0.8rem; left: 0.8rem; display: flex; gap: 0.5rem; }
+/* theme.css hace absoluto a .badge--live dentro del video; aquí ya lo posiciona el contenedor. */
+.player-overlay .badge--live { position: static; }
 .status-text { color: var(--paper-dim); font-size: 0.9rem; margin: 0.9rem 0; }
 .player-card .controls { display: flex; gap: 0.75rem; }
 
